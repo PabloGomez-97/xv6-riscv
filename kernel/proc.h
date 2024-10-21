@@ -104,4 +104,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // tarea-2
+  int priority;  // Campo para la prioridad
+  int boost;     // Campo para el boost
 };
