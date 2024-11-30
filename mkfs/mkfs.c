@@ -17,6 +17,9 @@
 
 #define NINODES 200
 
+#define IPB           (BSIZE / sizeof(struct dinode))
+
+
 // Disk layout:
 // [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
 
@@ -74,16 +77,17 @@ main(int argc, char *argv[])
   char buf[BSIZE];
   struct dinode din;
 
-
   static_assert(sizeof(int) == 4, "Integers must be 4 bytes!");
+
+  // Validar que el tamaño del bloque sea divisible por el tamaño del inodo
+  printf("BSIZE: %d, sizeof(struct dinode): %lu\n", BSIZE, sizeof(struct dinode));
+  assert((BSIZE % sizeof(struct dinode)) == 0);
+  assert((BSIZE % sizeof(struct dirent)) == 0);
 
   if(argc < 2){
     fprintf(stderr, "Usage: mkfs fs.img files...\n");
     exit(1);
   }
-
-  assert((BSIZE % sizeof(struct dinode)) == 0);
-  assert((BSIZE % sizeof(struct dirent)) == 0);
 
   fsfd = open(argv[1], O_RDWR|O_CREAT|O_TRUNC, 0666);
   if(fsfd < 0)
@@ -173,6 +177,7 @@ main(int argc, char *argv[])
 
   exit(0);
 }
+
 
 void
 wsect(uint sec, void *buf)

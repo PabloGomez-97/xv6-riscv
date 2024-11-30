@@ -129,7 +129,6 @@ UPROGS=\
 	$U/_grep\
 	$U/_init\
 	$U/_kill\
-	$U/_priority_test\
 	$U/_ln\
 	$U/_ls\
 	$U/_mkdir\
@@ -140,6 +139,7 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_chmodtest\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
