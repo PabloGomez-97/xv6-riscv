@@ -108,8 +108,10 @@ fileread(struct file *f, uint64 addr, int n)
 {
   int r = 0;
 
-  if(f->readable == 0)
-    return -1;
+  // Verificar permiso de lectura
+  if(f->readable == 0 || (f->ip->perm & 1) == 0) {
+    return -1; // Error: no tiene permiso de lectura
+  }
 
   if(f->type == FD_PIPE){
     r = piperead(f->pipe, addr, n);
@@ -128,7 +130,6 @@ fileread(struct file *f, uint64 addr, int n)
 
   return r;
 }
-
 // Write to file f.
 // addr is a user virtual address.
 int
@@ -136,8 +137,10 @@ filewrite(struct file *f, uint64 addr, int n)
 {
   int r, ret = 0;
 
-  if(f->writable == 0)
-    return -1;
+  // Verificar permiso de escritura
+  if(f->writable == 0 || (f->ip->perm & 2) == 0) {
+    return -1; // Error: no tiene permiso de escritura
+  }
 
   if(f->type == FD_PIPE){
     ret = pipewrite(f->pipe, addr, n);
@@ -146,12 +149,6 @@ filewrite(struct file *f, uint64 addr, int n)
       return -1;
     ret = devsw[f->major].write(1, addr, n);
   } else if(f->type == FD_INODE){
-    // write a few blocks at a time to avoid exceeding
-    // the maximum log transaction size, including
-    // i-node, indirect block, allocation blocks,
-    // and 2 blocks of slop for non-aligned writes.
-    // this really belongs lower down, since writei()
-    // might be writing a device like the console.
     int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
     int i = 0;
     while(i < n){
@@ -167,7 +164,6 @@ filewrite(struct file *f, uint64 addr, int n)
       end_op();
 
       if(r != n1){
-        // error from writei
         break;
       }
       i += r;

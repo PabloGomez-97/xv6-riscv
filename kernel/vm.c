@@ -449,3 +449,28 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+int mprotect(pagetable_t pagetable, void *addr, int len) {
+    uint64 start = (uint64)addr;
+    uint64 end = start + len * PGSIZE;
+
+    for (uint64 a = start; a < end; a += PGSIZE) {
+        pte_t *pte = walk(pagetable, a, 0);
+        if (pte == 0 || (*pte & PTE_V) == 0)
+            return -1;  // Dirección inválida o no mapeada
+        *pte &= ~PTE_W;  // Desactiva el bit de escritura
+    }
+    return 0;
+}
+
+int munprotect(pagetable_t pagetable, void *addr, int len) {
+    uint64 start = (uint64)addr;
+    uint64 end = start + len * PGSIZE;
+
+    for (uint64 a = start; a < end; a += PGSIZE) {
+        pte_t *pte = walk(pagetable, a, 0);
+        if (pte == 0 || (*pte & PTE_V) == 0)
+            return -1;  // Dirección inválida o no mapeada
+        *pte |= PTE_W;  // Activa el bit de escritura
+    }
+    return 0;
+}

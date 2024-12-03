@@ -1,12 +1,19 @@
+
+
+#ifndef FILE_H
+#define FILE_H
+
+#include "fs.h"  // Usa la estructura definida en fs.h
+
 struct file {
-  enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
-  int ref; // reference count
-  char readable;
-  char writable;
-  struct pipe *pipe; // FD_PIPE
-  struct inode *ip;  // FD_INODE and FD_DEVICE
-  uint off;          // FD_INODE
-  short major;       // FD_DEVICE
+    enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
+    int ref; // reference count
+    char readable;
+    char writable;
+    struct pipe *pipe;
+    struct inode *ip;  // Apunta a la estructura inode definida en fs.h
+    uint off;
+    short major;
 };
 
 #define major(dev)  ((dev) >> 16 & 0xFFFF)
@@ -14,20 +21,7 @@ struct file {
 #define	mkdev(m,n)  ((uint)((m)<<16| (n)))
 
 // in-memory copy of an inode
-struct inode {
-  uint dev;           // Device number
-  uint inum;          // Inode number
-  int ref;            // Reference count
-  struct sleeplock lock; // protects everything below here
-  int valid;          // inode has been read from disk?
-
-  short type;         // copy of disk inode
-  short major;
-  short minor;
-  short nlink;
-  uint size;
-  uint addrs[NDIRECT+1];
-};
+struct inode;
 
 // map major device number to device functions.
 struct devsw {
@@ -38,3 +32,4 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+#endif // FILE_H

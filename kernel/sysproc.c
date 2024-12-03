@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "fs.h"
 
 uint64
 sys_exit(void)
@@ -12,7 +13,7 @@ sys_exit(void)
   int n;
   argint(0, &n);
   exit(n);
-  return 0; // not reached
+  return 0;  // not reached
 }
 
 uint64
@@ -25,34 +26,6 @@ uint64
 sys_fork(void)
 {
   return fork();
-}
-
-uint64
-sys_getppid(void)
-{
-  return myproc()->parent->pid;
-}
-
-uint64
-sys_getancestor(void)
-{
-  int n;
-  struct proc *p = myproc();
-
-  int argResult;
-  argint(0, &n);
-  argResult = n;
-  if (argResult < 0) // Obtener el parámetro n
-    return -1;
-
-  for (int i = 0; i < n; i++)
-  {
-    if (p->parent == 0) // No hay más ancestros
-      return -1;
-    p = p->parent; // Avanza al siguiente ancestro
-  }
-
-  return p->pid;
 }
 
 uint64
@@ -71,7 +44,7 @@ sys_sbrk(void)
 
   argint(0, &n);
   addr = myproc()->sz;
-  if (growproc(n) < 0)
+  if(growproc(n) < 0)
     return -1;
   return addr;
 }
@@ -83,14 +56,12 @@ sys_sleep(void)
   uint ticks0;
 
   argint(0, &n);
-  if (n < 0)
+  if(n < 0)
     n = 0;
   acquire(&tickslock);
   ticks0 = ticks;
-  while (ticks - ticks0 < n)
-  {
-    if (killed(myproc()))
-    {
+  while(ticks - ticks0 < n){
+    if(killed(myproc())){
       release(&tickslock);
       return -1;
     }
@@ -122,88 +93,90 @@ sys_uptime(void)
   return xticks;
 }
 
-static int
-validate_addr_len(void *addr, int len, struct proc *p)
-{
-  uint64 va = (uint64)addr;
 
-  // Validar que la dirección esté alineada a página
-  if (va % PGSIZE != 0)
-    return -1;
-
-  // Validar que la longitud sea positiva
-  if (len <= 0)
-    return -1;
-
-  // Verificar que el rango de memoria pertenece al proceso
-  uint64 end_va = va + (len * PGSIZE);
-
-  if (va >= MAXVA || end_va > MAXVA || end_va < va)
-    return -1;
-
-  // Verificar que las páginas están mapeadas
-  for (uint64 a = va; a < end_va; a += PGSIZE)
-  {
-    pte_t *pte = walk(p->pagetable, a, 0);
-    if (pte == 0 || (*pte & PTE_V) == 0)
-      return -1;
-  }
-
-  return 0;
+uint64
+sys_getppid(void){
+  struct proc *p=myproc();
+  return p->parent ? p->parent->pid : 0; //Devuelve el PID del padre o 0 si no tiene padre
 }
 
 uint64
-sys_mprotect(void)
-{
-  uint64 addr; // Cambiado de void* a uint64
-  int len;
+sys_getancestor(void) {
+  int n;
 
-  if (argaddr(0, &addr) < 0 || argint(1, &len) < 0) // Usando uint64 en lugar de void*
-    return -1;
+  argint(0, &n);
 
-  // Validar dirección y longitud
-  if (validate_addr_len((void *)addr, len, myproc()) < 0) // Casting addr a void*
-    return -1;
+  struct proc *p = myproc();
+  for (int i = 0; i < n; i++) {
+    if (p->parent == 0)
 
-  // Recorrer las páginas y modificar los permisos
-  uint64 a = addr;
-  for (int i = 0; i < len; i++)
-  {
-    pte_t *pte = walk(myproc()->pagetable, a + i * PGSIZE, 0);
-    if (pte == 0 || (*pte & PTE_V) == 0)
-      return -1;
-    *pte &= ~PTE_W; // Desactivar bit de escritura
+    p = p->parent;
   }
+  return p->pid;
+}
 
-  // Flush TLB para que los cambios surtan efecto
-  sfence_vma();
-  return 0;
+extern int set_priority(int pid, int priority);
+extern int set_boost(int pid, int boost);
+
+// Declaramos las funciones de mprotect y munprotect
+int mprotect(pagetable_t pagetable, void *addr, int len);
+int munprotect(pagetable_t pagetable, void *addr, int len);
+
+uint64 sys_mprotect(void) {
+    uint64 addr;
+    int len;
+
+    // Llama a argaddr y argint sin verificar un valor de retorno.
+    //  se asume que si algo sale mal con estos, habrá un efecto visible en la ejecución por como esta seteado xv6.
+    argaddr(0, (uint64*)&addr);
+    argint(1, &len);
+
+    // Validación manual: si addr o len no son válidos, retorna -1.
+    if (addr == 0 || len <= 0)
+        return -1;
+
+    return mprotect(myproc()->pagetable, (void *)addr, len);
+}
+
+uint64 sys_munprotect(void) {
+    uint64 addr;
+    int len;
+
+    argaddr(0, (uint64*)&addr);
+    argint(1, &len);
+
+    if (addr == 0 || len <= 0)
+        return -1;
+
+    return munprotect(myproc()->pagetable, (void *)addr, len);
 }
 
 uint64
-sys_munprotect(void)
-{
-  uint64 addr; // Cambiado de void* a uint64
-  int len;
+sys_chmod(void) {
+    char path[MAXPATH];
+    int mode;
 
-  if (argaddr(0, &addr) < 0 || argint(1, &len) < 0) // Usando uint64 en lugar de void*
-    return -1;
+    // Usa un búfer de tamaño fijo en lugar de un puntero doble
+    if (argstr(0, path, MAXPATH) < 0 || argint(1, &mode) < 0) {
+        return -1; // Error al obtener argumentos
+    }
 
-  // Validar dirección y longitud
-  if (validate_addr_len((void *)addr, len, myproc()) < 0) // Casting addr a void*
-    return -1;
+    struct inode *ip = namei(path); // Encuentra el inodo del archivo
+    if (!ip) return -1;
 
-  // Recorrer las páginas y modificar los permisos
-  uint64 a = addr;
-  for (int i = 0; i < len; i++)
-  {
-    pte_t *pte = walk(myproc()->pagetable, a + i * PGSIZE, 0);
-    if (pte == 0 || (*pte & PTE_V) == 0)
-      return -1;
-    *pte |= PTE_W; // Activar bit de escritura
-  }
+    begin_op();
+    ilock(ip);
 
-  // Flush TLB para que los cambios se guarden
-  sfence_vma();
-  return 0;
+    if (ip->perm == 5) { // Si el archivo es inmutable
+        iunlockput(ip);
+        end_op();
+        return -1; // No se puede cambiar permisos de un archivo inmutable
+    }
+
+    ip->perm = mode; // Cambia los permisos
+    iupdate(ip);
+    iunlockput(ip);
+    end_op();
+
+    return 0; // Operación exitosa
 }

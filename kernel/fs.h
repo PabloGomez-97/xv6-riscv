@@ -1,25 +1,29 @@
 // On-disk file system format.
 // Both the kernel and user programs use this header file.
 
-#define ROOTINO 1  // root i-number
-#define BSIZE 1024 // block size
+#ifndef FS_H
+#define FS_H
+#define ROOTINO  1   // root i-number
+#define BSIZE 1024  // block size
 
+
+#include "spinlock.h"  // Si está definido
+#include "sleeplock.h" // Agrega este encabezado
 // Disk layout:
 // [ boot block | super block | log | inode blocks |
 //                                          free bit map | data blocks]
 //
 // mkfs computes the super block and builds an initial file system. The
 // super block describes the disk layout:
-struct superblock
-{
-  uint magic;      // Must be FSMAGIC
-  uint size;       // Size of file system image (blocks)
-  uint nblocks;    // Number of data blocks
-  uint ninodes;    // Number of inodes.
-  uint nlog;       // Number of log blocks
-  uint logstart;   // Block number of first log block
-  uint inodestart; // Block number of first inode block
-  uint bmapstart;  // Block number of first free map block
+struct superblock {
+  uint magic;        // Must be FSMAGIC
+  uint size;         // Size of file system image (blocks)
+  uint nblocks;      // Number of data blocks
+  uint ninodes;      // Number of inodes.
+  uint nlog;         // Number of log blocks
+  uint logstart;     // Block number of first log block
+  uint inodestart;   // Block number of first inode block
+  uint bmapstart;    // Block number of first free map block
 };
 
 #define FSMAGIC 0x10203040
@@ -29,35 +33,47 @@ struct superblock
 #define MAXFILE (NDIRECT + NINDIRECT)
 
 // On-disk inode structure
-struct dinode
-{
-  short type;              // Tipo de archivo
-  short major;             // Número de dispositivo mayor
-  short minor;             // Número de dispositivo menor
-  short nlink;             // Número de enlaces
-  uint addrs[NDIRECT + 1]; // Direcciones de bloques de datos
-  uint size;               // Tamaño del archivo en bytes
-  char padding[57];        // Ajusta el tamaño del padding según sea necesario
-  int perm;                // Permisos del archivo
+struct dinode {
+  short type;           // File type
+  short major;          // Major device number (T_DEVICE only)
+  short minor;          // Minor device number (T_DEVICE only)
+  short nlink;          // Number of links to inode in file system
+  uint size;            // Size of file (bytes)
+  uint addrs[NDIRECT+1];   // Data block addresses
 };
 
 // Inodes per block.
-#define IPB (BSIZE / sizeof(struct dinode))
+#define IPB           (BSIZE / sizeof(struct dinode))
 
 // Block containing inode i
-#define IBLOCK(i, sb) ((i) / IPB + sb.inodestart)
+#define IBLOCK(i, sb)     ((i) / IPB + sb.inodestart)
 
 // Bitmap bits per block
-#define BPB (BSIZE * 8)
+#define BPB           (BSIZE*8)
 
 // Block of free map containing bit for block b
-#define BBLOCK(b, sb) ((b) / BPB + sb.bmapstart)
+#define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart)
 
 // Directory is a file containing a sequence of dirent structures.
 #define DIRSIZ 14
 
-struct dirent
-{
+struct dirent {
   ushort inum;
   char name[DIRSIZ];
 };
+
+struct inode {
+    uint dev;
+    uint inum;
+    int ref;
+    int valid;
+    short type;
+    short major;
+    short minor;
+    short nlink;
+    uint size;
+    uint addrs[NDIRECT+1];
+    int perm; // Campo para permisos
+    struct sleeplock lock; 
+};
+#endif // FS_H
